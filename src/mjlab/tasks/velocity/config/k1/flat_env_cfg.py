@@ -1,0 +1,31 @@
+from dataclasses import dataclass
+
+from mjlab.tasks.velocity.config.k1.rough_env_cfg import (
+  BoosterK1RoughEnvCfg,
+)
+
+
+@dataclass
+class BoosterK1FlatEnvCfg(BoosterK1RoughEnvCfg):
+  def __post_init__(self):
+    super().__post_init__()
+
+    assert self.scene.terrain is not None
+    self.scene.terrain.terrain_type = "plane"
+    self.scene.terrain.terrain_generator = None
+    self.curriculum.terrain_levels = None
+
+
+@dataclass
+class BoosterK1FlatEnvCfg_PLAY(BoosterK1FlatEnvCfg):
+  def __post_init__(self):
+    super().__post_init__()
+
+    # Effectively infinite episode length.
+    self.episode_length_s = int(1e9)
+
+    self.observations.policy.enable_corruption = False
+    self.events.push_robot = None
+
+    self.commands.twist.ranges.lin_vel_x = (-1.5, 2.0)
+    self.commands.twist.ranges.ang_vel_z = (-0.7, 0.7)
