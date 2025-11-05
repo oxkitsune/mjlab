@@ -30,12 +30,13 @@ def get_spec() -> mujoco.MjSpec:
   spec.assets = get_assets(spec.meshdir)
   return spec
 
+
 ##
 # Keyframe config.
 ##
 
 HOME_KEYFRAME = EntityCfg.InitialStateCfg(
-  pos=(0, 0, 0.513),
+  pos=(0, 0, 0.453),
   joint_pos={
     "Left_Shoulder_Roll": -1.4,
     "Left_Elbow_Yaw": -0.4,
@@ -47,9 +48,38 @@ HOME_KEYFRAME = EntityCfg.InitialStateCfg(
     "Right_Hip_Pitch": -0.2,
     "Right_Knee_Pitch": 0.4,
     "Right_Ankle_Pitch": -0.2,
-    },
+  },
   joint_vel={".*": 0.0},
 )
+
+CRAWL_KEYFRAME = EntityCfg.InitialStateCfg(
+  pos=(0, 0, 0.353),
+  rot=(0, 0, 0.707, 0.707),
+  joint_pos={
+    "Left_Shoulder_Pitch": -1.6,
+    "Left_Shoulder_Roll": -0.3,
+    "Left_Elbow_Pitch": 1.54,
+    "Left_Elbow_Yaw": -1.5,
+    "Right_Shoulder_Pitch": -1.6,
+    "Right_Shoulder_Roll": 0.3,
+    "Right_Elbow_Pitch": 1.54,
+    "Right_Elbow_Yaw": 1.5,
+    "Left_Hip_Pitch": -2.2,
+    "Left_Hip_Roll": 1.57,
+    "Left_Hip_Yaw": 0.68,
+    "Left_Knee_Pitch": 1.68,
+    "Left_Ankle_Pitch": 0.03,
+    "Left_Ankle_Roll": -0.3,
+    "Right_Hip_Pitch": -2.2,
+    "Right_Hip_Roll": -1.57,
+    "Right_Hip_Yaw": -0.68,
+    "Right_Knee_Pitch": 1.68,
+    "Right_Ankle_Pitch": 0.03,
+    "Right_Ankle_Roll": 0.3,
+  },
+  joint_vel={".*": 0.0},
+)
+
 
 ##
 # Collision config.
@@ -77,7 +107,7 @@ FULL_COLLISION_WITHOUT_SELF = CollisionCfg(
 # This disables all collisions except the feet.
 # Feet get condim=3, all other geoms are disabled.
 FEET_ONLY_COLLISION = CollisionCfg(
-  geom_names_expr=[r"^(left|right)_foot_collision$"],
+  geom_names_expr=[r"^(left|right)_(foot|hand)_collision$"],
   contype=0,
   conaffinity=0,
   condim=3,
@@ -90,7 +120,7 @@ FEET_ONLY_COLLISION = CollisionCfg(
 ##
 
 K1_ROBOT_CFG = EntityCfg(
-  init_state=HOME_KEYFRAME,
+  init_state=CRAWL_KEYFRAME,
   collisions=(FULL_COLLISION,),
   spec_fn=get_spec,
 )

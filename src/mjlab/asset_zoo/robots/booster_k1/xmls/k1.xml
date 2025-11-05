@@ -49,7 +49,7 @@
 
   <worldbody>
     <light pos="1 0 3.5" dir="0 0 -1" directional="true" />
-    <body name="Trunk" pos="0 0 .55" childclass="k1">
+    <body name="Trunk" pos="0 0 .55" quat="0.707 0 0.707 0" childclass="k1">
       <freejoint name="floating_base_joint" />
       <inertial pos="-0.0043392 -0.00065534 0.065686"
         quat="0.999896 -0.00411546 0.0137413 -0.00168959" mass="6.3921"
@@ -110,9 +110,10 @@
                 mesh="Left_Arm_4" />
               <geom class="collision" size="0.0211306 0.04" pos="-0.001 0.1 0.0045" quat="0.73 0.67 0.081 -0.098" type="cylinder"/>
               <body name="left_hand_end_ball" pos="0 0.203 0">
+                <site name="left_hand"/>
                 <inertial pos="0 0 0" mass="0.002" diaginertia="1e-05 1e-05 1e-05" />
                 <geom class="visual" size="0.025" type="sphere" />
-                <geom class="collision" size="0.025" type="sphere" />
+                <geom name="left_hand_collision" class="collision" size="0.025" type="sphere" />
               </body>
             </body>
           </body>
@@ -147,9 +148,10 @@
               <geom class="visual" mesh="Right_Arm_4" />
               <geom class="collision" size="0.0211332 0.04" pos="-0.001 -0.1 0.0045" quat="0.67 0.73 0.098 -0.081" type="cylinder" />
               <body name="right_hand_end_ball" pos="0 -0.203 0">
+                <site name="right_hand"/>
                 <inertial pos="0 0 0" mass="0.002" diaginertia="1e-05 1e-05 1e-05" />
                 <geom class="visual" size="0.025" type="sphere" />
-                <geom class="collision" size="0.025" type="sphere" />
+                <geom name="right_hand_collision" class="collision" size="0.025" type="sphere" />
               </body>
             </body>
           </body>
@@ -305,6 +307,24 @@
       -0.2 0 0 0.4 -0.2 0
       -0.2 0 0 0.4 -0.2 0
       "/>
+
+    <key name="crawl"
+      qpos="
+      0 0 0.353
+      0 0 0 0
+      0 0
+      -1.5 -0.3 1.54 -1.5
+      -1.5 0.3 1.54 1.5
+      -2.2 1.57 0.68 1.68 0.03 -0.3
+      -2.2 -1.57 -0.68 1.68 0.03 -0.3
+      "
+      ctrl="
+      0 0
+      -1.5 -0.3 1.54 -1.5
+      -1.5 0.3 1.54 1.5
+      -2.2 1.57 0.68 1.68 0.03 -0.3
+      -2.2 -1.57 -0.68 1.68 0.03 -0.3
+      " />
   </keyframe>
 
 </mujoco>
