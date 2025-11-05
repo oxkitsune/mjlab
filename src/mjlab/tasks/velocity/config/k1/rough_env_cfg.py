@@ -124,50 +124,28 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
     )
     self.scene.sensors = (feet_ground_cfg, self_collision_cfg)
 
+    def uniform_lin_vel(min_val: float, max_val: float) -> dict:
+      return {
+        "lin_vel_x": (min_val, max_val),
+        "lin_vel_y": (min_val, max_val),
+        "ang_vel_z": (0, 0),
+      }
+
     # Events.
     self.events.foot_friction.params["asset_cfg"].geom_names = geom_names
     self.curriculum.command_vel.params["velocity_stages"] = [
-      {
-        "step": 0,
-        "lin_vel_x": (-1.0, 1.0),
-        "lin_vel_y": (-1.0, 1.0),
-        "ang_vel_z": (0, 0),
-      },
-      {
-        "step": 1000 * 24,
-        "lin_vel_x": (-1.2, 1.2),
-        "lin_vel_y": (-1.2, 1.2),
-        "ang_vel_z": (0, 0),
-      },
-      {
-        "step": 3000 * 24,
-        "lin_vel_x": (-1.5, 1.5),
-        "lin_vel_y": (-1.5, 1.5),
-        "ang_vel_z": (0, 0),
-      },
-      {
-        "step": 5000 * 24,
-        "lin_vel_x": (-1.7, 1.7),
-        "lin_vel_y": (-1.7, 1.7),
-        "ang_vel_z": (0, 0),
-      },
+      {"step": 0, **uniform_lin_vel(-0.5, 0.5)},
+      {"step": 1000 * 24, **uniform_lin_vel(-1.0, 1.0)},
+      {"step": 3000 * 24, **uniform_lin_vel(-1.5, 1.5)},
+      {"step": 5000 * 24, **uniform_lin_vel(-1.7, 1.7)},
       {
         "step": 80000 * 24,
-        "lin_vel_x": (-2.0, 2.0),
-        "lin_vel_y": (-2.0, 2.0),
-        "ang_vel_z": (0, 0),
+        **uniform_lin_vel(-2.0, 2.0),
       },
       {
         "step": 120000 * 24,
-        "lin_vel_x": (-2.5, 2.5),
-        "lin_vel_y": (-2.5, 2.5),
-        "ang_vel_z": (0, 0),
+        **uniform_lin_vel(-2.5, 2.5),
       },
-    ]
-
-    self.curriculum.soft_landing_weight.params["weight_stages"] = [
-      {"step": 0, "weight": -0.02},
-      {"step": 2000 * 24, "weight": -0.04},
     ]
 
     self.events.reset_base.params["pose_range"] = {
