@@ -115,7 +115,12 @@ class SceneEntityCfg:
     # Handle three resolution cases.
     if names is not None and isinstance(ids, list):
       self._validate_consistency(
-        names, ids, entity_all_names, find_method, config.kind_label
+        config.names_attr,
+        names,
+        ids,
+        entity_all_names,
+        find_method,
+        config.kind_label,
       )
     elif names is not None:
       self._resolve_names_to_ids(
@@ -134,6 +139,7 @@ class SceneEntityCfg:
 
   def _validate_consistency(
     self,
+    names_attr: str,
     names: list[str],
     ids: list[int],
     entity_all_names: list[str],
@@ -145,15 +151,19 @@ class SceneEntityCfg:
     Raises:
       ValueError: If names and IDs don't match.
     """
-    found_ids, _ = find_method(names, preserve_order=self.preserve_order)
+    resolved_ids, resolved_names = find_method(
+      names, preserve_order=self.preserve_order
+    )
     computed_names = [entity_all_names[i] for i in ids]
 
-    if found_ids != ids or computed_names != names:
+    if resolved_ids != ids or resolved_names != computed_names:
       raise ValueError(
         f"Inconsistent {kind_label} names and indices. "
-        f"Names {names} resolved to indices {found_ids}, "
+        f"Names {names} resolved to indices {resolved_ids}, "
         f"but indices {ids} (mapping to names {computed_names}) were provided."
       )
+
+    setattr(self, names_attr, resolved_names)
 
   def _resolve_names_to_ids(
     self,

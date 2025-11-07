@@ -331,7 +331,7 @@ class RewardCfg:
 @dataclass
 class TerminationCfg:
   time_out: DoneTerm = term(DoneTerm, func=mdp.time_out, time_out=True)
-  fell_over: DoneTerm = term(
+  fell_over: DoneTerm | None = term(
     DoneTerm, func=mdp.bad_orientation, params={"limit_angle": math.radians(70.0)}
   )
   illegal_contact: DoneTerm | None = term(

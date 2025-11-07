@@ -73,6 +73,7 @@ class CommandsCfg:
     debug_vis=False,
     initial_state=0.0,
     toggle_on_resample=True,
+    resample_smoothing=0.05,
   )
 
 
@@ -141,14 +142,18 @@ class RewardCfg:
       "command_name": "pose",
       "start_keyframe": None,
       "end_keyframe": None,
-      "std": 0.35,
+      "std": 0.7,
+      "root_height_weight": 0.0,
+      "root_height_std": 0.05,
+      "root_orientation_weight": 0.0,
+      "root_orientation_std": 0.35,
     },
   )
   phase_alignment: RewardTerm = term(
     RewardTerm,
     func=pose_mdp.phase_command_alignment,
-    weight=1.5,
-    params={"command_name": "pose", "std": 0.2},
+    weight=0.2,
+    params={"command_name": "pose", "std": 0.75},
   )
   upright: RewardTerm = term(
     RewardTerm,
@@ -158,7 +163,7 @@ class RewardCfg:
   )
   body_ang_vel: RewardTerm = term(
     RewardTerm,
-    func=mdp.body_angular_velocity_penalty,
+    func=pose_mdp.body_angular_velocity_penalty,
     weight=-0.05,
     params={"asset_cfg": _trunk_body_cfg()},
   )
@@ -194,7 +199,7 @@ class PoseTransitionEnvCfg(ManagerBasedRlEnvCfg):
   sim: SimulationCfg = field(default_factory=lambda: SIM_CFG)
   viewer: ViewerConfig = field(default_factory=_default_viewer_cfg)
   decimation: int = 4
-  episode_length_s: float = 8.0
+  episode_length_s: float = 20.0
 
   def __post_init__(self):
     # Refresh SceneEntityCfg instances so repeated env creations don't retain resolved IDs.
@@ -205,6 +210,7 @@ class PoseTransitionEnvCfg(ManagerBasedRlEnvCfg):
     self.rewards.joint_pos_limits.params["asset_cfg"] = _full_joint_cfg()
     self.rewards.upright.params["asset_cfg"] = _trunk_body_cfg()
     self.rewards.body_ang_vel.params["asset_cfg"] = _trunk_body_cfg()
+    self.terminations.fell_over = None
 
     if (
       self.actions.phase.start_keyframe is None

@@ -9,8 +9,8 @@ from mjlab.asset_zoo.robots.booster_k1.k1_constants import (
 )
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
+from mjlab.tasks.pose_transition import mdp as pose_mdp
 from mjlab.tasks.pose_transition.pose_transition_env_cfg import PoseTransitionEnvCfg
-from mjlab.tasks.velocity.config.k1.rough_env_cfg import bad_orientation_crawl
 
 
 @dataclass
@@ -24,7 +24,6 @@ class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
 
     self.scene.entities = {"robot": replace(K1_ROBOT_CFG)}
 
-    site_names = ["left_hand", "right_hand", "left_foot", "right_foot"]
     geom_names = [
       "left_hand_collision",
       "right_hand_collision",
@@ -86,13 +85,22 @@ class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
     self.events.reset_base.params["pose_range"] = {
       "x": (-0.2, 0.2),
       "y": (-0.2, 0.2),
-      "yaw": (-0.2, 0.2),
+      "yaw": (-1.67, -1.47),
     }
     self.events.reset_base.params["velocity_range"] = {
       "lin_vel": (-0.05, 0.05),
       "ang_vel": (-0.05, 0.05),
     }
-    self.events.reset_robot_joints.params["position_range"] = (0.0, 0.0)
+    self.events.reset_robot_joints.func = pose_mdp.reset_joints_to_transition_pose
+    self.events.reset_robot_joints.params = {
+      "asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]),
+      "start_keyframe": CRAWL_KEYFRAME,
+      "end_keyframe": HOME_KEYFRAME,
+      "command_name": "pose",
+      "sync_command": True,
+    }
+    self.commands.pose.resampling_time_range = (0.6, 1.1)
+    self.commands.pose.resample_smoothing = 1.0
     self.events.foot_friction.params["asset_cfg"].geom_names = geom_names
     self.events.push_robot = None
 
@@ -102,7 +110,15 @@ class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
     )
     self.rewards.pose_tracking.params["start_keyframe"] = CRAWL_KEYFRAME
     self.rewards.pose_tracking.params["end_keyframe"] = HOME_KEYFRAME
+    self.rewards.pose_tracking.params["std"] = 0.7
+    self.rewards.pose_tracking.params["root_height_weight"] = 1.5
+    self.rewards.pose_tracking.params["root_height_std"] = 0.1
+    self.rewards.pose_tracking.params["root_orientation_weight"] = 5.0
+    self.rewards.pose_tracking.params["root_orientation_std"] = 0.6
+    # Only evaluate pose tracking reward when the command is near either keyframe.
+    self.rewards.pose_tracking.params["completion_margin"] = 0.35
     self.rewards.pose_tracking.weight = 6.0
+    self.rewards.phase_alignment.params["completion_margin"] = 0.35
     self.rewards.phase_alignment.weight = 2.0
 
     self.rewards.upright.params["asset_cfg"] = SceneEntityCfg(
@@ -112,15 +128,16 @@ class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
       "robot", body_names=["Trunk"]
     )
 
-    # Terminate based on crawl-friendly orientation limits.
-    if self.terminations.fell_over is not None:
-      self.terminations.fell_over.func = bad_orientation_crawl
-      self.terminations.fell_over.params = {
-        "asset_cfg": SceneEntityCfg("robot"),
-        "limit_angle": 1.2,
-      }
+    self.terminations.fell_over = None
+    # # Terminate based on crawl-friendly orientation limits.
+    # if self.terminations.fell_over is not None:
+    #   self.terminations.fell_over.func = bad_orientation_crawl
+    #   self.terminations.fell_over.params = {
+    #     "asset_cfg": SceneEntityCfg("robot"),
+    #     "limit_angle": 1.2,
+    #   }
+
     if self.terminations.illegal_contact is not None:
       self.terminations.illegal_contact.params = {"sensor_name": "nonfoot_ground_touch"}
 
     self.viewer.body_name = "Trunk"
-    self.scene.num_envs = max(self.scene.num_envs, 32)
