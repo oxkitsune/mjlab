@@ -37,22 +37,43 @@ def attach_onnx_metadata(
 ) -> None:
   robot: Entity = env.scene["robot"]
   onnx_path = os.path.join(path, filename)
-  joint_action = env.action_manager.get_term("joint_pos")
-  assert isinstance(joint_action, JointAction)
-  ctrl_ids = robot.indexing.ctrl_ids.cpu().numpy()
-  joint_stiffness = env.sim.mj_model.actuator_gainprm[ctrl_ids, 0]
-  joint_damping = -env.sim.mj_model.actuator_biasprm[ctrl_ids, 2]
+  joint_action: JointAction | None = None
+  if "joint_pos" in env.action_manager.active_terms:
+    candidate = env.action_manager.get_term("joint_pos")
+    if isinstance(candidate, JointAction):
+      joint_action = candidate
+  if joint_action is None:
+    for term_name in env.action_manager.active_terms:
+      candidate = env.action_manager.get_term(term_name)
+      if isinstance(candidate, JointAction):
+        joint_action = candidate
+        break
+  if joint_action is not None:
+    ctrl_ids = robot.indexing.ctrl_ids.cpu().numpy()
+    joint_stiffness = env.sim.mj_model.actuator_gainprm[ctrl_ids, 0]
+    joint_damping = -env.sim.mj_model.actuator_biasprm[ctrl_ids, 2]
+    action_scale = (
+      joint_action._scale[0].cpu().tolist()
+      if isinstance(joint_action._scale, torch.Tensor)
+      else joint_action._scale
+    )
+  else:
+    joint_stiffness = []
+    joint_damping = []
+    action_scale = []
   metadata = {
     "run_path": run_path,
     "joint_names": robot.joint_names,
-    "joint_stiffness": joint_stiffness.tolist(),
-    "joint_damping": joint_damping.tolist(),
+    "joint_stiffness": joint_stiffness.tolist()
+    if hasattr(joint_stiffness, "tolist")
+    else joint_stiffness,
+    "joint_damping": joint_damping.tolist()
+    if hasattr(joint_damping, "tolist")
+    else joint_damping,
     "default_joint_pos": robot.data.default_joint_pos[0].cpu().tolist(),
     "command_names": env.command_manager.active_terms,
     "observation_names": env.observation_manager.active_terms["policy"],
-    "action_scale": joint_action._scale[0].cpu().tolist()
-    if isinstance(joint_action._scale, torch.Tensor)
-    else joint_action._scale,
+    "action_scale": action_scale,
   }
 
   model = onnx.load(onnx_path)
