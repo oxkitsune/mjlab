@@ -7,8 +7,10 @@ from typing import Sequence, TYPE_CHECKING
 import torch
 
 from mjlab.entity import Entity, EntityCfg
+from mjlab.envs.mdp.rewards import _DEFAULT_ASSET_CFG
 from mjlab.managers.manager_term_config import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
+from mjlab.sensor.contact_sensor import ContactSensor
 from mjlab.tasks.pose_transition.mdp.actions import PoseBlendAction
 
 if TYPE_CHECKING:
@@ -51,6 +53,8 @@ class TrackPoseKeyframeReward:
     asset_cfg: SceneEntityCfg,
     command_name: str,
     std: float,
+    start_keyframe: EntityCfg.InitialStateCfg,
+    end_keyframe: EntityCfg.InitialStateCfg,
   ) -> torch.Tensor:
     del asset_cfg, command_name, std  # Configured in __init__.
     asset: Entity = env.scene[self.asset_cfg.name]
@@ -93,3 +97,22 @@ def phase_command_alignment(
   target = command[:, 0]
   error = torch.square(phase - target)
   return torch.exp(-error / (std**2))
+
+
+def body_angular_velocity_penalty(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+  """Penalize excessive body angular velocities."""
+  asset: Entity = env.scene[asset_cfg.name]
+  ang_vel = asset.data.body_link_ang_vel_w[:, asset_cfg.body_ids, :]
+  ang_vel = ang_vel.squeeze(1)
+  ang_vel_xy = ang_vel[:, :2]  # Don't penalize z-angular velocity.
+  return torch.sum(torch.square(ang_vel_xy), dim=1)
+
+
+def self_collision_cost(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+  """Cost that returns the number of self-collisions detected by a sensor."""
+  sensor: ContactSensor = env.scene[sensor_name]
+  assert sensor.data.found is not None
+  return sensor.data.found.squeeze(-1)

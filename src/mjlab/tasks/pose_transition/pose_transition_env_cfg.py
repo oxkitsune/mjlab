@@ -61,7 +61,6 @@ class ActionCfg:
 class CommandsCfg:
   pose: pose_mdp.PoseTransitionCommandCfg = term(
     pose_mdp.PoseTransitionCommandCfg,
-    asset_name="robot",
     resampling_time_range=(2.0, 4.0),
     debug_vis=False,
     initial_state=0.0,
@@ -151,7 +150,7 @@ class RewardCfg:
   )
   body_ang_vel: RewardTerm = term(
     RewardTerm,
-    func=mdp.body_angular_velocity_penalty,
+    func=pose_mdp.body_angular_velocity_penalty,
     weight=-0.05,
     params={"asset_cfg": SceneEntityCfg("robot", body_names=[])},
   )
@@ -168,7 +167,7 @@ class RewardCfg:
   )
   self_collisions: RewardTerm = term(
     RewardTerm,
-    func=mdp.self_collision_cost,
+    func=pose_mdp.self_collision_cost,
     weight=-1.0,
     params={"sensor_name": "self_collision"},
   )
@@ -190,7 +189,10 @@ class PoseTransitionEnvCfg(ManagerBasedRlEnvCfg):
   episode_length_s: float = 8.0
 
   def __post_init__(self):
-    if self.actions.phase.start_keyframe is None or self.actions.phase.end_keyframe is None:
+    if (
+      self.actions.phase.start_keyframe is None
+      or self.actions.phase.end_keyframe is None
+    ):
       raise ValueError(
         "PoseTransitionEnvCfg requires start/end keyframes to be provided before initialization."
       )
