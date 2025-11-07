@@ -20,16 +20,15 @@ from mjlab.tasks.pose_transition.pose_transition_env_cfg import PoseTransitionEn
 @dataclass
 class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
   def __post_init__(self):
-    # Use AutoPhaseTransitionAction - phase tracks command automatically
-    self.actions.phase = term(
-      pose_mdp.AutoPhaseTransitionActionCfg,
+    # Replace action with AutoPhaseTransitionAction (no term() wrapper)
+    self.actions.phase = pose_mdp.AutoPhaseTransitionActionCfg(
       asset_name="robot",
       actuator_names=(".*",),
       start_keyframe=CRAWL_KEYFRAME,
       end_keyframe=HOME_KEYFRAME,
       initial_phase=0.0,
       phase_smoothing=0.4,  # 0.4s time constant for smooth transitions
-      use_residuals=False,  # Pure tracking
+      use_residuals=False,  # Pure tracking, action_dim=0
     )
 
     super().__post_init__()
