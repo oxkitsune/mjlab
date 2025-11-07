@@ -10,7 +10,7 @@ from mjlab.envs.mdp.rewards import _DEFAULT_ASSET_CFG
 from mjlab.managers.manager_term_config import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor.contact_sensor import ContactSensor
-from mjlab.tasks.pose_transition.mdp.actions import PoseBlendAction
+from mjlab.tasks.pose_transition.mdp.actions import PoseBlendAction, PhaseVelocityAction
 from mjlab.tasks.pose_transition.mdp.interpolation import resolve_keyframe_poses
 from mjlab.third_party.isaaclab.isaaclab.utils.math import quat_error_magnitude
 
@@ -212,3 +212,123 @@ def self_collision_cost(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tenso
   sensor: ContactSensor = env.scene[sensor_name]
   assert sensor.data.found is not None
   return sensor.data.found.squeeze(-1)
+
+
+def phase_acceleration_penalty(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Penalty for high phase acceleration (encourages smooth transitions).
+
+  Only works with PhaseVelocityAction which tracks phase velocity.
+  """
+  phase_term = env.action_manager.get_term("phase")
+  if not isinstance(phase_term, PhaseVelocityAction):
+    return torch.zeros(env.num_envs, device=env.device)
+
+  acceleration = phase_term.phase_acceleration.squeeze(-1)
+  return torch.square(acceleration)
+
+
+def phase_velocity_alignment(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  std: float = 0.5,
+) -> torch.Tensor:
+  """Reward for phase velocity aligned with direction to target.
+
+  Encourages moving toward the commanded target (0 or 1).
+  """
+  phase_term = env.action_manager.get_term("phase")
+  if not isinstance(phase_term, PhaseVelocityAction):
+    return torch.zeros(env.num_envs, device=env.device)
+
+  command = env.command_manager.get_command(command_name)
+  assert command is not None
+  target = torch.clamp(command[:, 0], 0.0, 1.0)
+
+  phase = phase_term.phase.squeeze(-1)
+  phase_velocity = phase_term.phase_velocity.squeeze(-1)
+
+  # Compute desired direction: positive if target > phase, negative otherwise
+  error = target - phase
+  desired_direction = torch.sign(error)
+
+  # Reward when velocity aligns with desired direction
+  alignment = phase_velocity * desired_direction
+  # Use smooth reward function
+  reward = torch.exp(-torch.square(alignment - torch.abs(error)) / (std**2))
+
+  return reward
+
+
+def dense_pose_tracking(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg,
+  command_name: str,
+  std: float,
+  start_keyframe: EntityCfg.InitialStateCfg,
+  end_keyframe: EntityCfg.InitialStateCfg,
+  root_height_weight: float = 0.0,
+  root_height_std: float = 0.05,
+  root_orientation_weight: float = 0.0,
+  root_orientation_std: float = 0.35,
+) -> torch.Tensor:
+  """Dense pose tracking reward without completion margin.
+
+  This is a wrapper that creates a TrackPoseKeyframeReward with completion_margin=None,
+  providing reward signal throughout the entire transition.
+  """
+  # Create reward instance if not cached
+  if not hasattr(dense_pose_tracking, "_reward_instance"):
+    cfg = RewardTermCfg(
+      func=dense_pose_tracking,
+      weight=1.0,
+      params={
+        "asset_cfg": asset_cfg,
+        "command_name": command_name,
+        "std": std,
+        "start_keyframe": start_keyframe,
+        "end_keyframe": end_keyframe,
+        "root_height_weight": root_height_weight,
+        "root_height_std": root_height_std,
+        "root_orientation_weight": root_orientation_weight,
+        "root_orientation_std": root_orientation_std,
+        "completion_margin": None,  # No margin = dense reward
+      },
+    )
+    dense_pose_tracking._reward_instance = TrackPoseKeyframeReward(cfg, env)  # type: ignore[attr-defined]
+
+  return dense_pose_tracking._reward_instance(  # type: ignore[attr-defined]
+    env=env,
+    asset_cfg=asset_cfg,
+    command_name=command_name,
+    std=std,
+    start_keyframe=start_keyframe,
+    end_keyframe=end_keyframe,
+  )
+
+
+def dense_phase_alignment(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  std: float = 0.75,
+) -> torch.Tensor:
+  """Dense phase alignment reward without completion margin.
+
+  Provides reward throughout transition, not just at endpoints.
+  """
+  command = env.command_manager.get_command(command_name)
+  assert command is not None
+  target = torch.clamp(command[:, 0], 0.0, 1.0)
+
+  # Works with both action types
+  phase_term = env.action_manager.get_term("phase")
+  if isinstance(phase_term, PhaseVelocityAction):
+    phase = phase_term.phase.squeeze(-1)
+  elif isinstance(phase_term, PoseBlendAction):
+    phase = phase_term.phase.squeeze(-1)
+  else:
+    return torch.zeros(env.num_envs, device=env.device)
+
+  error = torch.square(phase - target)
+  reward = torch.exp(-error / (std**2))
+
+  return reward
