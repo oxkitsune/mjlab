@@ -83,6 +83,24 @@ def track_crawl_linear_velocity(
   return torch.exp(-lin_vel_error / std**2)
 
 
+def bad_orientation_crawl(
+  env: ManagerBasedRlEnv,
+  limit_angle: float,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+):
+  """Terminate when the asset's orientation exceeds the limit angle.
+
+  For crawl mode (z forward, y lateral):
+    - Body x is vertical (up/down axis).
+    - Orientation is bad when body x tilts away from world up beyond limit_angle.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  projected_gravity = asset.data.projected_gravity_b  # shape (num_envs, 3)
+  # projected_gravity is the gravity vector expressed in body frame, normalized.
+  # In crawl pose, world down ≈ +x_body, so we check the x-component instead of z.
+  return torch.acos(-projected_gravity[:, 0]).abs() > limit_angle
+
+
 @dataclass
 class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
   def __post_init__(self):
@@ -98,7 +116,7 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
       "left_foot_collision",
       "right_foot_collision",
     ]
-    target_foot_height = 0.1
+    target_foot_height = 0.05
 
     # Sensors.
     feet_ground_cfg = ContactSensorCfg(
@@ -122,7 +140,35 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
       reduce="none",
       num_slots=1,
     )
-    self.scene.sensors = (feet_ground_cfg, self_collision_cfg)
+    nonfoot_ground_cfg = ContactSensorCfg(
+      name="nonfoot_ground_touch",
+      primary=ContactMatch(
+        mode="geom",
+        entity="robot",
+        # Grab all collision geoms...
+        pattern=r".*_collision\d*$",
+        # Except for the foot geoms.
+        exclude=(
+          "left_hand_collision",
+          "right_hand_collision",
+          "left_foot_collision",
+          "right_foot_collision",
+          "Right_Shank_collision",
+          "Left_Shank_collision",
+          "Right_Hip_Yaw_collision",
+          "Left_Hip_Yaw_collision",
+          "right_hand_link_collision",
+          "left_hand_link_collision",
+          "Right_Arm_3_collision",
+          "Left_Arm_3_collision",
+        ),
+      ),
+      secondary=ContactMatch(mode="body", pattern="terrain"),
+      fields=("found",),
+      reduce="none",
+      num_slots=1,
+    )
+    self.scene.sensors = (feet_ground_cfg, self_collision_cfg, nonfoot_ground_cfg)
 
     def uniform_lin_vel(min_val: float, max_val: float) -> dict:
       return {
@@ -136,14 +182,9 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
     self.curriculum.command_vel.params["velocity_stages"] = [
       {"step": 0, **uniform_lin_vel(-0.5, 0.5)},
       {"step": 1000 * 24, **uniform_lin_vel(-1.0, 1.0)},
-      {"step": 3000 * 24, **uniform_lin_vel(-1.5, 1.5)},
-      {"step": 5000 * 24, **uniform_lin_vel(-1.7, 1.7)},
+      {"step": 3000 * 24, **uniform_lin_vel(-2.0, 2.0)},
       {
         "step": 80000 * 24,
-        **uniform_lin_vel(-2.0, 2.0),
-      },
-      {
-        "step": 120000 * 24,
         **uniform_lin_vel(-2.5, 2.5),
       },
     ]
@@ -163,32 +204,32 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
       # Head
       r".*Head.*": 0.1,
       # Lower body.
-      r".*Hip_Pitch.*": 0.4,
-      r".*Hip_Roll.*": 0.45,
-      r".*Hip_Yaw.*": 0.45,
-      r".*Knee.*": 0.45,
-      r".*Ankle_Pitch.*": 0.25,
-      r".*Ankle_Roll.*": 0.1,
+      r".*Hip_Pitch.*": 0.5,
+      r".*Hip_Roll.*": 0.5,
+      r".*Hip_Yaw.*": 0.7,
+      r".*Knee.*": 0.8,
+      r".*Ankle_Pitch.*": 0.4,
+      r".*Ankle_Roll.*": 0.25,
       # Arms.
-      r".*Shoulder_Pitch.*": 0.45,
-      r".*Shoulder_Roll.*": 0.45,
-      r".*Elbow.*": 0.45,
+      r".*Shoulder_Pitch.*": 0.6,
+      r".*Shoulder_Roll.*": 0.5,
+      r".*Elbow.*": 0.5,
     }
     # Maximum freedom for dynamic motion.
     self.rewards.pose.params["std_running"] = {
       # Head
       r".*Head.*": 0.1,
       # Lower body.
-      r".*Hip_Pitch.*": 0.5,
-      r".*Hip_Roll.*": 0.2,
-      r".*Hip_Yaw.*": 0.2,
-      r".*Knee.*": 0.6,
-      r".*Ankle_Pitch.*": 0.35,
-      r".*Ankle_Roll.*": 0.15,
+      r".*Hip_Pitch.*": 0.7,
+      r".*Hip_Roll.*": 0.7,
+      r".*Hip_Yaw.*": 1.0,
+      r".*Knee.*": 1.2,
+      r".*Ankle_Pitch.*": 0.6,
+      r".*Ankle_Roll.*": 0.55,
       # Arms.
-      r".*Shoulder_Pitch.*": 0.6,
-      r".*Shoulder_Roll.*": 0.4,
-      r".*Elbow.*": 0.55,
+      r".*Shoulder_Pitch.*": 0.9,
+      r".*Shoulder_Roll.*": 0.8,
+      r".*Elbow.*": 0.8,
     }
     self.rewards.foot_clearance.params["asset_cfg"].site_names = site_names
     self.rewards.foot_swing_height.params["asset_cfg"].site_names = site_names
@@ -210,8 +251,7 @@ class BoosterK1RoughEnvCfg(LocomotionVelocityEnvCfg):
     self.observations.critic.foot_height.params["asset_cfg"].site_names = site_names
 
     # Terminations.
-    self.terminations.illegal_contact = None
-    self.terminations.fell_over.params["limit_angle"] = math.radians(180)
+    self.terminations.fell_over.func = bad_orientation_crawl
 
     self.viewer.body_name = "Trunk"
     self.commands.twist.class_type = UniformCrawlVelocityCommand

@@ -52,7 +52,7 @@ HOME_KEYFRAME = EntityCfg.InitialStateCfg(
   joint_vel={".*": 0.0},
 )
 
-CRAWL_KEYFRAME = EntityCfg.InitialStateCfg(
+CRAWL_KEYFRAME_UPSIDE_DOWN = EntityCfg.InitialStateCfg(
   pos=(0, 0, 0.353),
   rot=(0, 0, 0.707, 0.707),
   joint_pos={
@@ -76,6 +76,34 @@ CRAWL_KEYFRAME = EntityCfg.InitialStateCfg(
     "Right_Knee_Pitch": 1.68,
     "Right_Ankle_Pitch": 0.03,
     "Right_Ankle_Roll": 0.3,
+  },
+  joint_vel={".*": 0.0},
+)
+
+CRAWL_KEYFRAME = EntityCfg.InitialStateCfg(
+  pos=(0, 0, 0.353),
+  rot=(0, 0, -0.707, 0.707),
+  joint_pos={
+    "Left_Shoulder_Pitch": -1.4,
+    "Left_Shoulder_Roll": 0.6,
+    "Left_Elbow_Pitch": -1.7,
+    "Left_Elbow_Yaw": -1.0,
+    "Right_Shoulder_Pitch": -1.4,
+    "Right_Shoulder_Roll": -0.6,
+    "Right_Elbow_Pitch": -1.7,
+    "Right_Elbow_Yaw": 1.0,
+    "Left_Hip_Pitch": 0.1,
+    "Left_Hip_Roll": 0.7,
+    "Left_Hip_Yaw": 0,
+    "Left_Knee_Pitch": 1.5,
+    "Left_Ankle_Pitch": 0.03,
+    "Left_Ankle_Roll": 0.0,
+    "Right_Hip_Pitch": 0.1,
+    "Right_Hip_Roll": -0.7,
+    "Right_Hip_Yaw": 0,
+    "Right_Knee_Pitch": 1.5,
+    "Right_Ankle_Pitch": 0.03,
+    "Right_Ankle_Roll": 0.0,
   },
   joint_vel={".*": 0.0},
 )
