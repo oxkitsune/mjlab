@@ -327,3 +327,193 @@ class PhaseVelocityActionCfg(ActionTermCfg):
   damping_strength: float = 10.0
   """Strength of boundary damping (higher = more aggressive)."""
   preserve_order: bool = False
+
+
+class AutoPhaseTransitionAction(ActionTerm):
+  """Automatic smooth phase transitions - policy optionally outputs residuals.
+
+  Phase automatically tracks the command using a smooth low-pass filter.
+  Policy has no direct control over phase. Policy can output:
+  - Nothing (action_dim=0): Pure trajectory tracking
+  - Joint residuals: Fine-tuning on top of keyframe blend
+  """
+
+  cfg: AutoPhaseTransitionActionCfg
+
+  def __init__(self, cfg: AutoPhaseTransitionActionCfg, env: ManagerBasedEnv):
+    super().__init__(cfg=cfg, env=env)
+
+    # Resolve actuators/joints controlled by this action.
+    actuator_ids, self._actuator_names = self._asset.find_actuators(
+      cfg.actuator_names, preserve_order=cfg.preserve_order
+    )
+    joint_ids, self._joint_names = self._asset.find_joints(
+      self._actuator_names, preserve_order=cfg.preserve_order
+    )
+
+    self._actuator_ids = torch.tensor(actuator_ids, device=self.device, dtype=torch.long)
+    self._joint_ids = torch.tensor(joint_ids, device=self.device, dtype=torch.long)
+
+    if cfg.start_keyframe is None or cfg.end_keyframe is None:
+      raise ValueError("AutoPhaseTransitionAction requires both start and end keyframes.")
+
+    default_joint_pos = self._asset.data.default_joint_pos
+    assert default_joint_pos is not None
+    base = default_joint_pos[0, self._joint_ids].clone()
+
+    start_targets = self._build_keyframe_tensor(
+      keyframe=cfg.start_keyframe,
+      base=base,
+      joint_names=self._joint_names,
+    )
+    end_targets = self._build_keyframe_tensor(
+      keyframe=cfg.end_keyframe,
+      base=base,
+      joint_names=self._joint_names,
+    )
+    self._start_targets = start_targets.unsqueeze(0)
+    self._delta_targets = (end_targets - start_targets).unsqueeze(0)
+
+    # Phase state (automatically controlled)
+    init_phase = torch.scalar_tensor(cfg.initial_phase, device=self.device).clamp(0.0, 1.0)
+    self._phase = init_phase.repeat(self.num_envs, 1)
+    self._phase_target = self._phase.clone()
+
+    # For smooth transitions
+    self._phase_smoothing = cfg.phase_smoothing
+
+    # Action space (residuals or none)
+    if cfg.use_residuals:
+      self._raw_actions = torch.zeros(self.num_envs, len(self._actuator_ids), device=self.device)
+    else:
+      self._raw_actions = torch.zeros(self.num_envs, 0, device=self.device)
+
+    self._residual_scale = cfg.residual_scale
+    self._use_residuals = cfg.use_residuals
+    self._targets = torch.zeros(self.num_envs, len(self._actuator_ids), device=self.device)
+
+    self._update_targets()
+
+  # Properties.
+
+  @property
+  def action_dim(self) -> int:
+    return len(self._actuator_ids) if self._use_residuals else 0
+
+  @property
+  def raw_action(self) -> torch.Tensor:
+    return self._raw_actions
+
+  @property
+  def phase(self) -> torch.Tensor:
+    return self._phase
+
+  @property
+  def phase_target(self) -> torch.Tensor:
+    """The target phase from the command."""
+    return self._phase_target
+
+  # Methods.
+
+  def process_actions(self, actions: torch.Tensor) -> None:
+    if self._use_residuals:
+      if actions.shape[1] != len(self._actuator_ids):
+        raise ValueError(
+          f"AutoPhaseTransitionAction expects shape (N, {len(self._actuator_ids)}), "
+          f"received {actions.shape}."
+        )
+      self._raw_actions[:] = actions
+    else:
+      if actions.shape[1] != 0:
+        raise ValueError(
+          f"AutoPhaseTransitionAction expects no actions (N, 0), received {actions.shape}."
+        )
+
+    # Update phase based on command (happens every step)
+    self._update_phase_from_command()
+    self._update_targets()
+
+  def apply_actions(self) -> None:
+    self._asset.write_joint_position_target_to_sim(self._targets, self._actuator_ids)
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    if env_ids is None:
+      env_ids = slice(None)
+
+    self._raw_actions[env_ids] = 0.0
+
+    # Reset phase to match command if we have access to it
+    # Otherwise initialize to configured initial phase
+    init = torch.scalar_tensor(self.cfg.initial_phase, device=self.device).clamp(0.0, 1.0)
+    self._phase[env_ids] = init
+    self._phase_target[env_ids] = init
+
+    self._update_targets(env_ids)
+
+  # Helpers.
+
+  def _update_phase_from_command(self) -> None:
+    """Update phase to smoothly track command using low-pass filter."""
+    # Get command from environment
+    command_manager = self._env.command_manager
+    command = command_manager.get_command("pose")  # Assumes command is named "pose"
+
+    if command is None:
+      return
+
+    # Command is the target phase (0.0 or 1.0)
+    self._phase_target[:] = torch.clamp(command[:, 0:1], 0.0, 1.0)
+
+    # Smooth phase towards target using exponential smoothing
+    # Higher smoothing = slower transitions (more filtering)
+    dt = self._env.step_dt
+    alpha = 1.0 - torch.exp(torch.tensor(-dt / self._phase_smoothing, device=self.device))
+    self._phase[:] = self._phase + alpha * (self._phase_target - self._phase)
+    self._phase[:] = torch.clamp(self._phase, 0.0, 1.0)
+
+  def _update_targets(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    phase = self._phase.clamp(0.0, 1.0)
+
+    # Blend keyframes based on current phase
+    blended = self._start_targets + phase * self._delta_targets
+
+    # Add residuals if enabled
+    if self._use_residuals:
+      blended = blended + self._raw_actions * self._residual_scale
+
+    if env_ids is None:
+      self._targets[:] = blended
+    else:
+      self._targets[env_ids] = blended[env_ids]
+
+  def _build_keyframe_tensor(
+    self,
+    keyframe: EntityCfg.InitialStateCfg,
+    base: torch.Tensor,
+    joint_names: Sequence[str],
+  ) -> torch.Tensor:
+    values = base.clone()
+    for pattern, value in keyframe.joint_pos.items():
+      regex = re.compile(pattern)
+      matched = [idx for idx, name in enumerate(joint_names) if regex.fullmatch(name)]
+      if not matched:
+        continue
+      values[matched] = value
+    return values.to(self.device)
+
+
+@dataclass(kw_only=True)
+class AutoPhaseTransitionActionCfg(ActionTermCfg):
+  class_type: type[ActionTerm] = field(default=AutoPhaseTransitionAction, init=False)
+  asset_name: str = "robot"
+  actuator_names: Sequence[str] = (".*",)
+  start_keyframe: EntityCfg.InitialStateCfg | None = None
+  end_keyframe: EntityCfg.InitialStateCfg | None = None
+  initial_phase: float = 0.0
+  phase_smoothing: float = 0.3
+  """Time constant for phase smoothing (seconds). Higher = slower transitions."""
+  use_residuals: bool = False
+  """If True, policy outputs joint residuals. If False, action_dim=0 (pure tracking)."""
+  residual_scale: float = 0.1
+  """Scale factor for residual actions (radians)."""
+  preserve_order: bool = False
