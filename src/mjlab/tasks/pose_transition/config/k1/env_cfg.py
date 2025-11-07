@@ -97,17 +97,20 @@ class BoosterK1PoseTransitionEnvCfg(PoseTransitionEnvCfg):
     self.events.push_robot = None
 
     # Reward shaping specific to K1.
-    pose_asset_cfg: SceneEntityCfg = self.rewards.pose_tracking.params["asset_cfg"]
-    pose_asset_cfg.joint_names = [".*"]
+    self.rewards.pose_tracking.params["asset_cfg"] = SceneEntityCfg(
+      "robot", joint_names=[".*"]
+    )
     self.rewards.pose_tracking.params["start_keyframe"] = CRAWL_KEYFRAME
     self.rewards.pose_tracking.params["end_keyframe"] = HOME_KEYFRAME
     self.rewards.pose_tracking.weight = 6.0
     self.rewards.phase_alignment.weight = 2.0
 
-    upright_asset_cfg: SceneEntityCfg = self.rewards.upright.params["asset_cfg"]
-    upright_asset_cfg.body_names = ["Trunk"]
-    body_ang_vel_cfg: SceneEntityCfg = self.rewards.body_ang_vel.params["asset_cfg"]
-    body_ang_vel_cfg.body_names = ["Trunk"]
+    self.rewards.upright.params["asset_cfg"] = SceneEntityCfg(
+      "robot", body_names=["Trunk"]
+    )
+    self.rewards.body_ang_vel.params["asset_cfg"] = SceneEntityCfg(
+      "robot", body_names=["Trunk"]
+    )
 
     # Terminate based on crawl-friendly orientation limits.
     if self.terminations.fell_over is not None:

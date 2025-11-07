@@ -48,6 +48,14 @@ def _default_viewer_cfg() -> ViewerConfig:
   )
 
 
+def _full_joint_cfg() -> SceneEntityCfg:
+  return SceneEntityCfg("robot", joint_names=[".*"])
+
+
+def _trunk_body_cfg() -> SceneEntityCfg:
+  return SceneEntityCfg("robot", body_names=["Trunk"])
+
+
 @dataclass
 class ActionCfg:
   phase: pose_mdp.PoseBlendActionCfg = term(
@@ -93,13 +101,13 @@ class ObservationCfg:
     joint_pos: ObsTerm = term(
       ObsTerm,
       func=mdp.joint_pos_rel,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+      params={"asset_cfg": _full_joint_cfg()},
       noise=Unoise(n_min=-0.01, n_max=0.01),
     )
     joint_vel: ObsTerm = term(
       ObsTerm,
       func=mdp.joint_vel_rel,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+      params={"asset_cfg": _full_joint_cfg()},
       noise=Unoise(n_min=-0.5, n_max=0.5),
     )
     command: ObsTerm = term(
@@ -129,7 +137,7 @@ class RewardCfg:
     func=pose_mdp.TrackPoseKeyframeReward,
     weight=4.0,
     params={
-      "asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]),
+      "asset_cfg": _full_joint_cfg(),
       "command_name": "pose",
       "start_keyframe": None,
       "end_keyframe": None,
@@ -146,13 +154,13 @@ class RewardCfg:
     RewardTerm,
     func=mdp.flat_orientation,
     weight=0.5,
-    params={"std": 0.3, "asset_cfg": SceneEntityCfg("robot", body_names=[])},
+    params={"std": 0.3, "asset_cfg": _trunk_body_cfg()},
   )
   body_ang_vel: RewardTerm = term(
     RewardTerm,
-    func=pose_mdp.body_angular_velocity_penalty,
+    func=mdp.body_angular_velocity_penalty,
     weight=-0.05,
-    params={"asset_cfg": SceneEntityCfg("robot", body_names=[])},
+    params={"asset_cfg": _trunk_body_cfg()},
   )
   action_rate_l2: RewardTerm = term(
     RewardTerm,
@@ -163,7 +171,7 @@ class RewardCfg:
     RewardTerm,
     func=mdp.joint_pos_limits,
     weight=-0.5,
-    params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+    params={"asset_cfg": _full_joint_cfg()},
   )
   self_collisions: RewardTerm = term(
     RewardTerm,
@@ -189,6 +197,15 @@ class PoseTransitionEnvCfg(ManagerBasedRlEnvCfg):
   episode_length_s: float = 8.0
 
   def __post_init__(self):
+    # Refresh SceneEntityCfg instances so repeated env creations don't retain resolved IDs.
+    for group in (self.observations.policy, self.observations.critic):
+      group.joint_pos.params["asset_cfg"] = _full_joint_cfg()
+      group.joint_vel.params["asset_cfg"] = _full_joint_cfg()
+    self.rewards.pose_tracking.params["asset_cfg"] = _full_joint_cfg()
+    self.rewards.joint_pos_limits.params["asset_cfg"] = _full_joint_cfg()
+    self.rewards.upright.params["asset_cfg"] = _trunk_body_cfg()
+    self.rewards.body_ang_vel.params["asset_cfg"] = _trunk_body_cfg()
+
     if (
       self.actions.phase.start_keyframe is None
       or self.actions.phase.end_keyframe is None
