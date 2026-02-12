@@ -475,15 +475,17 @@ class FastSAC:
 
     if load_cfg.get("actor"):
       self.actor.load_state_dict(loaded_dict["actor_state_dict"], strict=strict)
+    if (load_cfg.get("actor") or load_cfg.get("critic")) and (
+      "obs_normalizer_state_dict" in loaded_dict
+    ):
+      self.obs_normalizer.load_state_dict(
+        loaded_dict["obs_normalizer_state_dict"], strict=strict
+      )
     if load_cfg.get("critic"):
       self.critic.load_state_dict(loaded_dict["critic_state_dict"], strict=strict)
       if "critic_target_state_dict" in loaded_dict:
         self.critic_target.load_state_dict(
           loaded_dict["critic_target_state_dict"], strict=strict
-        )
-      if "obs_normalizer_state_dict" in loaded_dict:
-        self.obs_normalizer.load_state_dict(
-          loaded_dict["obs_normalizer_state_dict"], strict=strict
         )
       if "critic_obs_normalizer_state_dict" in loaded_dict:
         self.critic_obs_normalizer.load_state_dict(
