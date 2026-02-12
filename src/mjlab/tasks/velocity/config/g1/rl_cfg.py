@@ -1,6 +1,8 @@
 """RL configuration for Unitree G1 velocity task."""
 
 from mjlab.rl import (
+  RslRlFastSacAlgorithmCfg,
+  RslRlFastSacRunnerCfg,
   RslRlModelCfg,
   RslRlOnPolicyRunnerCfg,
   RslRlPpoAlgorithmCfg,
@@ -42,4 +44,46 @@ def unitree_g1_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     save_interval=50,
     num_steps_per_env=24,
     max_iterations=30_000,
+  )
+
+
+def unitree_g1_fast_sac_runner_cfg() -> RslRlFastSacRunnerCfg:
+  """Create FastSAC runner configuration for Unitree G1 velocity task."""
+  return RslRlFastSacRunnerCfg(
+    algorithm=RslRlFastSacAlgorithmCfg(
+      critic_lr=3e-4,
+      actor_lr=3e-4,
+      alpha_lr=3e-4,
+      gamma=0.97,
+      tau=0.125,
+      batch_size=8192,
+      learning_starts=10,
+      policy_frequency=4,
+      num_updates=8,
+      target_entropy_ratio=0.0,
+      alpha_init=0.001,
+      use_autotune=True,
+      actor_hidden_dim=512,
+      critic_hidden_dim=768,
+      num_atoms=101,
+      v_min=-20.0,
+      v_max=20.0,
+      num_q_networks=2,
+      use_layer_norm=True,
+      use_tanh=True,
+      log_std_min=-5.0,
+      log_std_max=0.0,
+      buffer_size=1024,
+      num_steps=1,
+      obs_normalization=True,
+      max_grad_norm=0.0,
+      weight_decay=0.001,
+      compile=True,
+      amp=True,
+      amp_dtype="bf16",
+    ),
+    experiment_name="g1_velocity_fast_sac",
+    save_interval=1000,
+    num_steps_per_env=1,
+    max_iterations=50_000,
   )

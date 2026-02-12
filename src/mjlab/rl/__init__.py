@@ -1,4 +1,6 @@
 from mjlab.rl.config import RslRlBaseRunnerCfg as RslRlBaseRunnerCfg
+from mjlab.rl.config import RslRlFastSacAlgorithmCfg as RslRlFastSacAlgorithmCfg
+from mjlab.rl.config import RslRlFastSacRunnerCfg as RslRlFastSacRunnerCfg
 from mjlab.rl.config import RslRlModelCfg as RslRlModelCfg
 from mjlab.rl.config import RslRlOnPolicyRunnerCfg as RslRlOnPolicyRunnerCfg
 from mjlab.rl.config import RslRlPpoAlgorithmCfg as RslRlPpoAlgorithmCfg
