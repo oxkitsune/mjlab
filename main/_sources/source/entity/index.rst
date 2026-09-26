@@ -118,16 +118,14 @@ For simple cases a lambda suffices:
 
     spec_fn = lambda: mujoco.MjSpec.from_file("robot.xml")
 
-For anything more involved, use a regular function. The asset zoo robots
-all follow this pattern: load the XML, attach mesh assets, and return
-the spec.
+For anything more involved, use a regular function. MuJoCo resolves mesh
+assets from disk automatically, so ``get_spec`` only needs to load the
+XML:
 
 .. code-block:: python
 
     def get_spec() -> mujoco.MjSpec:
-        spec = mujoco.MjSpec.from_file(str(ROBOT_XML))
-        spec.assets = get_assets(spec.meshdir)
-        return spec
+        return mujoco.MjSpec.from_file(str(ROBOT_XML))
 
 Because ``spec_fn`` is an arbitrary callable, you can perform any
 `MjSpec edits <https://mujoco.readthedocs.io/en/stable/python.html#spec>`_
@@ -184,7 +182,8 @@ modify the ``MjSpec`` before compilation:
    * - Field
      - Purpose
    * - ``collisions``
-     - Set contact parameters (contype, conaffinity, friction) per geom.
+     - Replace the entity's collision structure: which geoms collide, and
+       with what contact parameters.
    * - ``lights``
      - Add lights to specific bodies.
    * - ``cameras``
@@ -193,11 +192,36 @@ modify the ``MjSpec`` before compilation:
      - Add procedural textures (checker, gradient, etc.).
    * - ``materials``
      - Add materials and optionally assign them to geoms by regex.
+   * - ``geoms``
+     - Patch attributes of existing geoms (visualization group, collision
+       attributes). Unset attributes are left untouched.
 
 Each editor accepts regex patterns to target specific elements. For
 example, a ``CollisionCfg`` with ``geom_names_expr=(".*_foot.*",)``
 sets contact parameters only on foot geoms. See the asset zoo
 (``mjlab.asset_zoo.robots``) for complete examples.
+
+``geoms`` and ``collisions`` both write geom attributes but with
+different semantics. A ``GeomCfg`` is a sparse *patch*: every attribute
+defaults to ``None``, and only attributes you set are written. A
+``CollisionCfg`` is a *policy*: ``contype``, ``conaffinity``,
+``condim``, and ``priority`` are required and always written to every
+matched geom, and non-matched geoms have collision disabled by default,
+so the entity's contact behavior is fully determined by the config
+regardless of the source XML. Collision configs are applied after geom
+configs; mjlab warns if a ``GeomCfg`` sets a collision attribute that a
+``CollisionCfg`` then overwrites.
+
+Heterogeneous worlds
+^^^^^^^^^^^^^^^^^^^^
+
+For scenes that need different mesh assets in different parallel worlds
+(for example, training a manipulation policy that generalizes across
+object shapes), use ``VariantEntityCfg`` instead of ``EntityCfg``. Each
+world is assigned a variant proportional to a configurable weight, and
+mesh-dependent compiled constants (collision bounds, body inertials,
+subtree mass) are stored as per-world arrays so domain randomization and
+viewers stay consistent. See :ref:`heterogeneous_worlds`.
 
 Subclassing Entity
 ^^^^^^^^^^^^^^^^^^
@@ -328,3 +352,4 @@ that span multiple entities.
    :maxdepth: 1
 
    entity_data
+   per_world_mesh

@@ -59,7 +59,7 @@
     <link rel="prev" title="Contributing" href="contributing.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Feb 25, 2026"/>
+    <meta name="docbuild:last-update" content="Sep 26, 2026"/>
   </head>
   
   
@@ -178,7 +178,10 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/cartpole.html">Cartpole: Building Your First Environment</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Concepts</span></p>
@@ -186,6 +189,7 @@
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Architecture Overview</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="entity/index.html">Entity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="entity/entity_data.html">Entity Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="entity/per_world_mesh.html">Heterogeneous Worlds</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="actuators.html">Actuators</a></li>
@@ -209,14 +213,19 @@
 <li class="toctree-l1"><a class="reference internal" href="randomization.html">Domain Randomization</a></li>
 <li class="toctree-l1"><a class="reference internal" href="curriculum.html">Curriculum</a></li>
 <li class="toctree-l1"><a class="reference internal" href="metrics.html">Metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="recorders.html">Recorders</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Training &amp; Debugging</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="training/rsl_rl.html">Training with RSL-RL</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training/rsl_rl.html">Training with RSL-RL</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="training/motion_imitation.html">Motion Imitation</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="viewers.html">Viewers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="training/distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="training/cloud.html">Cloud Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="debugging/nan_guard.html">NaN Guard</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging/export_scene.html">Export Scene</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -240,6 +249,7 @@
 <li class="toctree-l1"><a class="reference internal" href="motivation.html">Why mjlab?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migration_isaac_lab.html">Migrating from Isaac Lab</a></li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ &amp; Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="research.html">Research</a></li>
 <li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
 </ul>
 
@@ -609,13 +619,13 @@ Command targets are resampled. Observation history buffers are cleared.</p></li>
 <li><p><strong>Step.</strong> The policy action is processed by the <code class="docutils literal notranslate"><span class="pre">ActionManager</span></code>. The
 physics simulation advances <code class="docutils literal notranslate"><span class="pre">decimation</span></code> times, with actuator commands
 applied and entity state updated each sub-step. After the decimation
-loop, the <code class="docutils literal notranslate"><span class="pre">TerminationManager</span></code> checks stop conditions, the
-<code class="docutils literal notranslate"><span class="pre">RewardManager</span></code> computes the reward signal, and any terminated
-environments are reset. A single <code class="docutils literal notranslate"><span class="pre">forward()</span></code> call refreshes derived
-quantities for all environments. The <code class="docutils literal notranslate"><span class="pre">CommandManager</span></code> advances or
-resamples goals. Interval events fire if scheduled. Sensors update. The
-<code class="docutils literal notranslate"><span class="pre">ObservationManager</span></code> assembles the observation for the next policy
-query.</p></li>
+loop, the <code class="docutils literal notranslate"><span class="pre">TerminationManager</span></code> checks stop conditions and the
+<code class="docutils literal notranslate"><span class="pre">RewardManager</span></code> computes the reward signal. Step and interval events
+fire if scheduled, acting on the pre-reset state. Any terminated
+environments are then reset. A single <code class="docutils literal notranslate"><span class="pre">forward()</span></code> call refreshes
+derived quantities for all environments. The <code class="docutils literal notranslate"><span class="pre">CommandManager</span></code> advances
+or resamples goals. Sensors update. The <code class="docutils literal notranslate"><span class="pre">ObservationManager</span></code> assembles
+the observation for the next policy query.</p></li>
 </ol>
 <p>The step sequence in order:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>action_manager.process_action(action)
@@ -626,10 +636,11 @@ for _ in range(decimation):
 termination_manager.compute()
 reward_manager.compute()
 metrics_manager.compute()
+event_manager.apply(mode=&quot;step&quot;)
+event_manager.apply(mode=&quot;interval&quot;)
 [reset terminated envs]
 sim.forward()
-command_manager.compute()
-event_manager.apply(mode=&quot;interval&quot;)
+command_manager.compute()  # dt=0 for envs just reset
 sim.sense()
 observation_manager.compute()
 </pre></div>
@@ -722,7 +733,7 @@ By The mjlab Developers
   
   <div class="footer-item">
     <p class="last-updated">
-  Last updated on Feb 25, 2026.
+  Last updated on Sep 26, 2026.
   <br/>
 </p>
   </div>

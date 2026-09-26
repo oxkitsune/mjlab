@@ -87,6 +87,10 @@ and ``dr.body_ipos`` are the same function).
      - ``geom_size``
      - Geom-specific size parameters (radius, half-lengths, etc.)
      - Automatically recomputes ``geom_rbound`` and ``geom_aabb``
+   * - ``dr.geom_matid``
+     - ``geom_matid``
+     - Which baked material the geom renders with
+     - Samples uniformly from ``asset_cfg.material_names``
 
 .. rubric:: Body fields
 
@@ -215,6 +219,30 @@ and ``dr.body_ipos`` are the same function).
      - ``light_dir``
      - Light direction vector
      -
+   * - ``dr.light_diffuse``
+     - ``light_diffuse``
+     - Diffuse RGB color
+     -
+   * - ``dr.light_specular``
+     - ``light_specular``
+     - Specular RGB color
+     -
+   * - ``dr.light_ambient``
+     - ``light_ambient``
+     - Ambient RGB color
+     -
+   * - ``dr.light_attenuation``
+     - ``light_attenuation``
+     - Constant, linear, and quadratic attenuation coefficients
+     -
+   * - ``dr.light_cutoff``
+     - ``light_cutoff``
+     - Spot light half-cone angle in degrees
+     - Ignored for directional lights
+   * - ``dr.light_exponent``
+     - ``light_exponent``
+     - Spot light angular falloff exponent
+     - Ignored for directional lights
 
 .. rubric:: Material fields
 
@@ -230,6 +258,47 @@ and ``dr.body_ipos`` are the same function).
      - ``mat_rgba``
      - Material RGBA color (tints textures)
      -
+   * - ``dr.mat_emission``
+     - ``mat_emission``
+     - Self-illumination multiplier
+     - Used by MuJoCo Warp RGB rendering
+   * - ``dr.mat_specular``
+     - ``mat_specular``
+     - Specular reflection strength in ``[0, 1]``
+     - Scales the MuJoCo Warp RGB specular component
+   * - ``dr.mat_shininess``
+     - ``mat_shininess``
+     - Surface shininess in ``[0, 1]``
+     - Used by MuJoCo Warp RGB rendering
+   * - ``dr.mat_texrepeat``
+     - ``mat_texrepeat``
+     - Texture repeat in the S/T directions
+     - Only affects textured materials; values should stay positive
+   * - ``dr.mat_texid``
+     - ``mat_texid``
+     - Texture assigned to a material's ``mjtTextureRole`` slot (RGB by
+       default)
+     - Samples uniformly from ``asset_cfg.texture_names``. Use ``role`` to
+       target a different texture role.
+
+.. rubric:: Contact pair fields
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 18 34 20
+
+   * - Function
+     - MuJoCo field
+     - Description
+     - Notes
+   * - ``dr.pair_friction``
+     - ``pair_friction``
+     - Per-pair friction override ``[tangent1, tangent2, spin, roll1, roll2]``
+     - Default axis: 0 (tangent1, requires ``condim >= 3``). Use
+       ``isotropic=True`` to mirror tangent2 = tangent1 (and roll2 = roll1).
+       Overrides per-geom friction for explicitly defined
+       `<contact><pair> <https://mujoco.readthedocs.io/en/stable/XMLreference.html#contact-pair>`_
+       elements. See :ref:`dr-pair-friction`.
 
 .. rubric:: Tendon fields
 
@@ -280,23 +349,19 @@ model.
        See :ref:`dr-pseudo-inertia` for details.
    * - ``dr.pd_gains``
      - Randomizes stiffness (kp) and damping (kd) together. For
-       ``BuiltinPositionActuator`` and ``XmlPositionActuator`` it writes to
+       ``BuiltinPositionActuator`` and ``XmlActuator`` it writes to
        ``actuator_gainprm`` and ``actuator_biasprm``. For
        ``IdealPdActuator`` it sets gains on the entity directly. All three
-       can be wrapped with ``DelayedActuator``.
+       support inline delay fields.
    * - ``dr.effort_limits``
      - Randomizes actuator force range (``actuator_forcerange``). For
        ``IdealPdActuator`` also updates the entity's internal force limit.
-       Supports ``BuiltinPositionActuator``, ``XmlPositionActuator``, and
+       Supports ``BuiltinPositionActuator``, ``XmlActuator``, and
        ``IdealPdActuator``.
    * - ``dr.encoder_bias``
      - Adds a fixed per-joint bias to position readings, simulating encoder
        calibration errors. Writes to ``entity.data.encoder_bias``, not the
        MuJoCo model.
-   * - ``dr.sync_actuator_delays``
-     - Samples a single lag value per environment and applies it to all
-       ``DelayedActuator`` instances on the entity, ensuring consistent
-       delay across joints.
 
 
 .. _dr-pseudo-inertia:
@@ -581,6 +646,125 @@ Plane, heightfield, mesh, and SDF geoms are not supported because their bounds
 come from vertex data or are infinite, not derivable from ``geom_size``.
 
 
+.. _dr-pair-friction:
+
+``pair_friction`` and isotropic friction
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``pair_friction`` stores five friction coefficients per contact pair:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 20 20 50
+
+   * - Index
+     - Name
+     - Active when
+     - Meaning
+   * - 0
+     - tangent1
+     - ``condim >= 3``
+     - Sliding friction along the first tangent axis of the contact frame
+   * - 1
+     - tangent2
+     - ``condim >= 3``
+     - Sliding friction along the second tangent axis
+   * - 2
+     - spin
+     - ``condim >= 4``
+     - Torsional friction around the contact normal
+   * - 3
+     - roll1
+     - ``condim = 6``
+     - Rolling friction around the first tangent axis
+   * - 4
+     - roll2
+     - ``condim = 6``
+     - Rolling friction around the second tangent axis
+
+MuJoCo's standard geom friction is a 3-vector ``[tangential, torsional,
+rolling]`` that is automatically expanded to the 5-vector by replicating the
+tangential coefficient into tangent1 and tangent2, and the rolling coefficient
+into roll1 and roll2. For pair overrides the five values are stored
+independently, so the symmetry must be maintained explicitly. Pass
+``isotropic=True`` to enforce this: after sampling, tangent2 is overwritten
+with tangent1, and roll2 is overwritten with roll1 whenever axes 3 or 4 are
+targeted.
+
+**Recommendations by condim.**
+
+**condim = 3.** Both tangent axes are active. Sample tangent1 and set tangent2 equal to it with ``isotropic=True``. Pass
+``shared_random=True`` so that all pairs selected by ``asset_cfg`` receive the
+same sampled value within each environment (environments still get independent
+values from one another):
+
+.. code-block:: python
+
+   dr.pair_friction(
+       env,
+       env_ids=None,
+       ranges=(0.4, 1.0),
+       operation="abs",
+       asset_cfg=SceneEntityCfg("robot", pair_names=("foot1_floor", "foot2_floor")),
+       axes=[0],           # sample tangent1
+       shared_random=True, # all pairs selected by asset_cfg share one value per env
+       isotropic=True,     # tangent2 = tangent1
+   )
+
+**condim = 4.** Spin (axis 2) is additionally active. Randomize sliding
+friction as above. If spin should also be randomized, do so in a separate
+call with its own range:
+
+.. code-block:: python
+
+   dr.pair_friction(
+       env,
+       env_ids=None,
+       ranges=(0.4, 1.0),
+       operation="abs",
+       asset_cfg=SceneEntityCfg("robot", pair_names=("foot1_floor", "foot2_floor")),
+       axes=[0],
+       shared_random=True,
+       isotropic=True,
+   )
+   dr.pair_friction(
+       env,
+       env_ids=None,
+       ranges=(0.003, 0.01),
+       operation="abs",
+       asset_cfg=SceneEntityCfg("robot", pair_names=("foot1_floor", "foot2_floor")),
+       axes=[2],
+       shared_random=True,
+   )
+
+**condim = 6.** All five axes are active. Randomize sliding friction as above.
+To also randomize rolling friction symmetrically, target axis 3 with
+``isotropic=True`` so that roll2 is set equal to roll1:
+
+.. code-block:: python
+
+   dr.pair_friction(
+       env,
+       env_ids=None,
+       ranges=(0.4, 1.0),
+       operation="abs",
+       asset_cfg=SceneEntityCfg("robot", pair_names=("foot1_floor", "foot2_floor")),
+       axes=[0],
+       shared_random=True,
+       isotropic=True,
+   )
+   dr.pair_friction(
+       env,
+       env_ids=None,
+       ranges=(0.0001, 0.001),
+       operation="abs",
+       asset_cfg=SceneEntityCfg("robot", pair_names=("foot1_floor", "foot2_floor")),
+       axes=[3],
+       shared_random=True,
+       isotropic=True,  # roll2 = roll1
+   )
+
+
 Fields without ``dr`` functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -616,11 +800,6 @@ do not have one yet. They will be added as demand arises.
      - ``actuator_dynprm``, ``actuator_gear``,
        ``actuator_ctrlrange``, ``actuator_actrange``
      - ``pd_gains`` and ``effort_limits`` cover common cases.
-   * - Material
-     - ``mat_texrepeat``
-     - Continuous per-world field. Material-level entity indexing
-       is now supported (see ``dr.mat_rgba``), but ``dr.mat_texrepeat``
-       is not yet implemented.
 
 Better as custom code
 """""""""""""""""""""
@@ -651,8 +830,8 @@ choices. Write a custom event term instead (see
      - ``geom_margin``, ``geom_gap``, ``pair_margin``, ``pair_gap``
      - Interact with solver parameters above.
    * - Pair overrides
-     - ``pair_friction``, ``eq_data``
-     - Per-pair friction and constraint anchor overrides.
+     - ``eq_data``
+     - Constraint anchor overrides.
    * - Spring reference
      - ``qpos_spring``
      - Coupled with ``qpos0``; randomizing independently is
@@ -672,10 +851,6 @@ per-environment values.
    * - Category
      - Field(s)
      - Notes
-   * - Material / texture swapping
-     - ``geom_matid``, ``mat_texid``
-     - Integer IDs that need a swapping API, not continuous
-       sampling. Requires material-level entity indexing.
    * - Mesh
      - ``mesh_vert``, ``mesh_normal``, ``mesh_face``, etc.
      - Shape variation for manipulation objects. These fields
@@ -745,16 +920,23 @@ bounds:
     truncated_normal = dr.Distribution(
         name="truncated_normal",
         sample=lambda lo, hi, shape, device: torch.clamp(
-            torch.normal(
-                mean=(lo + hi) / 2,
-                std=(hi - lo) / 4,  # 95% of samples within bounds
-            ).expand(shape),
+            (lo + hi) / 2
+            + (hi - lo) / 4  # 95% of samples within bounds
+            * torch.randn(shape, device=device),
             min=lo,
             max=hi,
         ),
     )
 
     params={"distribution": truncated_normal, "ranges": (0.3, 1.2)}
+
+.. warning::
+
+   ``sample`` receives ``lower``/``upper`` as tensors, so the sampled tensor must be
+   built from ``shape`` (for example via ``torch.randn(shape, device=device)``). Passing
+   tensor bounds straight to a sampler such as ``torch.normal`` yields a tensor shaped
+   like the bounds, not like ``shape``, which silently gives every environment the same
+   value.
 
 Operation
 ^^^^^^^^^
@@ -901,9 +1083,11 @@ Friction (reset)
 
     robot_collision = CollisionCfg(
         geom_names_expr=[".*_foot.*"],
+        contype=1,
+        conaffinity=1,
+        condim=3,
         priority=1,
         friction=(0.6,),
-        condim=3,
     )
 
 
@@ -1098,7 +1282,8 @@ The three recomputation levels, from cheapest to most expensive:
      - After changing ``body_gravcomp``
    * - ``set_const_0``
      - ``dof_invweight0``, ``body_invweight0``, ``tendon_length0``,
-       ``tendon_invweight0``, plus camera and light references
+       ``tendon_invweight0``, ``actuator_acc0``, plus camera and light
+       references
      - After changing ``dof_armature``, ``tendon_armature``,
        ``body_inertia``, ``body_pos``, ``body_quat``, or ``qpos0``
    * - ``set_const``
@@ -1183,15 +1368,19 @@ The native viewer syncs per-world model fields from the GPU to a local
 ``MjModel`` before each render. All of MuJoCo's built-in visualization
 toggles then work correctly against the randomized model:
 
-- Geom appearance (``geom_rgba``, ``geom_size``, ``geom_pos``, ``geom_quat``)
-- Material color (``mat_rgba``): tints textured surfaces
+- Geom appearance (``geom_rgba``, ``geom_size``, ``geom_pos``, ``geom_quat``,
+  ``geom_matid``)
+- Material appearance (``mat_rgba``, ``mat_emission``, ``mat_specular``,
+  ``mat_shininess``, ``mat_texrepeat``, ``mat_texid``)
 - Body and site poses (``body_pos``, ``body_quat``, ``body_ipos``,
   ``site_pos``, ``site_quat``)
 - Inertia (``body_inertia``, ``body_iquat``, ``body_mass``): press ``I``
   to toggle inertia boxes
 - Camera parameters (``cam_pos``, ``cam_quat``, ``cam_fovy``,
   ``cam_intrinsic``): press ``Q`` to toggle camera frustums
-- Lights (``light_pos``, ``light_dir``)
+- Lights (``light_pos``, ``light_dir``, ``light_diffuse``, ``light_specular``,
+  ``light_ambient``, ``light_attenuation``, ``light_cutoff``,
+  ``light_exponent``)
 
 .. grid:: 2
 
@@ -1234,12 +1423,13 @@ world-space positions directly from GPU simulation data (``cam_xpos``,
 
 .. note::
 
-   ``geom_rgba`` and ``geom_size`` DR are **not** reflected in viser. Geom
-   colors and sizes are baked into the scene's GLB meshes at construction
-   time. The underlying viser API (``add_batched_meshes_simple``) supports
-   per-instance color updates via ``batched_colors``, but this requires
-   routing color-only geoms through a different handle type than the current
-   ``add_batched_meshes_trimesh`` path. Deferred for a future update.
+   ``geom_rgba``, ``geom_size`` and ``mat_texid`` DR are **not** reflected
+   in viser. Geom colors, sizes and textures are baked into the scene's
+   GLB meshes at construction time. The underlying viser API
+   (``add_batched_meshes_simple``) supports per-instance color updates via
+   ``batched_colors``, but this requires routing color-only geoms through
+   a different handle type than the current ``add_batched_meshes_trimesh``
+   path. Deferred for a future update.
 
 
 Migrating from Isaac Lab

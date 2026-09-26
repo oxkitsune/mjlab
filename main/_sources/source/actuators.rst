@@ -36,20 +36,17 @@ starting point.
         ),
     )
 
-Wrap any actuator in ``DelayedActuatorCfg`` to model communication
+Add delay fields directly on any actuator config to model communication
 latency.
 
 .. code-block:: python
 
-    from mjlab.actuator import DelayedActuatorCfg, BuiltinPositionActuatorCfg
+    from mjlab.actuator import BuiltinPositionActuatorCfg
 
-    DelayedActuatorCfg(
-        base_cfg=BuiltinPositionActuatorCfg(
-            target_names_expr=(".*",),
-            stiffness=80.0,
-            damping=10.0,
-        ),
-        delay_target="position",
+    BuiltinPositionActuatorCfg(
+        target_names_expr=(".*",),
+        stiffness=80.0,
+        damping=10.0,
         delay_min_lag=2,  # Minimum 2 physics steps
         delay_max_lag=5,  # Maximum 5 physics steps
     )
@@ -64,6 +61,7 @@ MuJoCo's integrator handles velocity-dependent forces.
 
 **Built-in actuators** (``BuiltinPositionActuator``,
 ``BuiltinVelocityActuator``, ``BuiltinMotorActuator``,
+``BuiltinPdActuator``, ``BuiltinDcMotorActuator``,
 ``BuiltinMuscleActuator``) create native MuJoCo actuator elements in the
 MjSpec. The physics engine computes the control law and integrates
 velocity-dependent damping forces implicitly. This provides the best
@@ -121,6 +119,31 @@ control.
 
 **BuiltinMotorActuator**: Creates ``<motor>`` actuators for direct torque
 control.
+
+**BuiltinPdActuator**: Native PD that closes on both a position and a
+velocity target, implemented as paired ``<position>`` + ``<velocity>``
+actuators summing to ``kp * (p_target - q) + kd * (v_target - qdot)``.
+``BuiltinPositionActuator`` puts kd on the ``<position>`` element and
+implicitly assumes a zero velocity reference; use this when the policy
+emits a non-zero velocity target. Native delivery lets
+``implicit`` / ``implicitfast`` see the kd term in their velocity update,
+unlike ``IdealPdActuator`` which forwards Python-computed torque through
+an opaque ``<motor>``.
+
+**BuiltinDcMotorActuator**: Wraps MuJoCo's native
+`<dcmotor> <https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-dcmotor>`_
+element. Torque is ``tau = K * (V - K * omega) / R``; the back-EMF runs
+through the native bias path, so ``implicit`` / ``implicitfast`` pick up
+its velocity derivative as effective damping. Three input modes pick what
+``ctrl`` carries: VOLTAGE drives the motor directly; POSITION / VELOCITY
+close an internal PID (with anti-windup and slew limiting) against a
+single setpoint, whose Vmax-clamped output becomes torque. POSITION mode
+pins v_target = 0 (the kd term acts on raw velocity). Optional physics:
+inductance,
+thermal model with I^2R heating, cogging ripple, LuGre friction.
+``DcMotorActuator`` (the explicit version) is a software PD with a
+velocity-dependent torque clamp on top of a ``<motor>``; this is the real
+electrical model.
 
 **BuiltinMuscleActuator**: Creates ``<muscle>`` actuators for
 biologically-inspired muscle dynamics with force-length-velocity
@@ -198,15 +221,13 @@ config finds existing actuators by matching their ``target`` joint name
 against the ``target_names_expr`` patterns. Each joint must have exactly one
 matching actuator.
 
-**XmlPositionActuator**: Wraps existing ``<position>`` actuators
-
-**XmlVelocityActuator**: Wraps existing ``<velocity>`` actuators
-
-**XmlMotorActuator**: Wraps existing ``<motor>`` actuators
+**XmlActuator**: Wraps any actuator already defined in the XML. The
+actuator type (position, velocity, motor, muscle) is auto detected from
+the XML element, or you can set ``command_field`` explicitly.
 
 .. code-block:: python
 
-    from mjlab.actuator import XmlPositionActuatorCfg
+    from mjlab.actuator import XmlActuatorCfg
 
     # Robot XML already has:
     # <actuator>
@@ -215,56 +236,44 @@ matching actuator.
 
     # Wrap existing XML actuators.
     actuators = (
-        XmlPositionActuatorCfg(target_names_expr=("hip_joint",)),
+        XmlActuatorCfg(target_names_expr=("hip_joint",)),
     )
 
-Delayed actuator
-^^^^^^^^^^^^^^^^
+Actuator delays
+^^^^^^^^^^^^^^^
 
-Generic wrapper that adds command delays to any actuator. Useful for
-modeling actuator latency and communication delays. The delay operates on
-command targets before they reach the actuator's control law.
+Any actuator config supports inline delay fields for modeling command
+latency. On a real robot, the onboard PD loop runs at KHz with direct
+encoder access, but the position target from the policy arrives late due
+to inference time and communication bus cycles. Actuator
+delay models this: the command target is delayed, but the control law
+still sees fresh joint state.
+
+This is distinct from observation delay, which models sensor pipeline
+latency (stale state going into the policy). Together they cover both
+legs of the round trip: sensor to policy to motor.
 
 .. code-block:: python
 
-    from mjlab.actuator import DelayedActuatorCfg, IdealPdActuatorCfg
+    from mjlab.actuator import IdealPdActuatorCfg
 
     # Add 2-5 step delay to position commands.
     actuators = (
-        DelayedActuatorCfg(
-            base_cfg=IdealPdActuatorCfg(
-                target_names_expr=(".*",),
-                stiffness=80.0,
-                damping=10.0,
-            ),
-            delay_target="position",     # Delay position commands
+        IdealPdActuatorCfg(
+            target_names_expr=(".*",),
+            stiffness=80.0,
+            damping=10.0,
             delay_min_lag=2,
             delay_max_lag=5,
-            delay_hold_prob=0.3,         # 30% chance to keep previous lag
-            delay_update_period=10,      # Update lag every 10 steps
+            delay_hold_prob=0.3,         # 30% chance to keep current lag
+            delay_update_period=10,      # Resample lag every 10 steps
         ),
     )
 
-
-**Multi-target delays:**
-
-.. code-block:: python
-
-    DelayedActuatorCfg(
-        base_cfg=IdealPdActuatorCfg(...),
-        delay_target=("position", "velocity", "effort"),
-        delay_min_lag=2,
-        delay_max_lag=5,
-    )
-
-Delays are quantized to physics timesteps. For example, with 500Hz physics
-(2ms/step), ``delay_min_lag=2`` represents a 4ms minimum delay.
-
-.. note::
-
-     Each target gets an independent delay buffer with its own lag
-     schedule. This provides maximum flexibility for modeling different
-     latency characteristics for position, velocity, and effort commands.
+Each step, a lag is sampled uniformly from ``[delay_min_lag,
+delay_max_lag]``. Delays are quantized to physics timesteps. For
+example, with 500Hz physics (2ms/step), ``delay_min_lag=2`` represents
+a 4ms minimum delay.
 
 
 Authoring actuator configs

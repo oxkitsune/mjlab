@@ -71,6 +71,7 @@ Table of Contents
    source/randomization
    source/curriculum
    source/metrics
+   source/recorders
 
 .. toctree::
    :maxdepth: 1
@@ -81,6 +82,7 @@ Table of Contents
    source/training/distributed_training
    source/training/cloud
    source/debugging/nan_guard
+   source/debugging/export_scene
 
 .. toctree::
    :maxdepth: 2
@@ -95,6 +97,7 @@ Table of Contents
    source/motivation
    source/migration_isaac_lab
    source/faq
+   source/research
    source/changelog
 
 License & citation

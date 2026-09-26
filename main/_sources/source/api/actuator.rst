@@ -18,22 +18,21 @@ mjlab.actuator
   - :class:`BuiltinPositionActuatorCfg`
   - :class:`BuiltinVelocityActuator`
   - :class:`BuiltinVelocityActuatorCfg`
+  - :class:`BuiltinPdActuator`
+  - :class:`BuiltinPdActuatorCfg`
+  - :class:`BuiltinDcMotorActuator`
+  - :class:`BuiltinDcMotorActuatorCfg`
+  - :class:`DcMotorInputMode`
+  - :class:`DcMotorDatasheetParams`
+  - :class:`DcMotorPhysicalParams`
   - :class:`BuiltinMuscleActuator`
   - :class:`BuiltinMuscleActuatorCfg`
-  - :class:`XmlMotorActuator`
-  - :class:`XmlMotorActuatorCfg`
-  - :class:`XmlPositionActuator`
-  - :class:`XmlPositionActuatorCfg`
-  - :class:`XmlVelocityActuator`
-  - :class:`XmlVelocityActuatorCfg`
-  - :class:`XmlMuscleActuator`
-  - :class:`XmlMuscleActuatorCfg`
+  - :class:`XmlActuator`
+  - :class:`XmlActuatorCfg`
   - :class:`IdealPdActuator`
   - :class:`IdealPdActuatorCfg`
   - :class:`DcMotorActuator`
   - :class:`DcMotorActuatorCfg`
-  - :class:`DelayedActuator`
-  - :class:`DelayedActuatorCfg`
   - :class:`LearnedMlpActuator`
   - :class:`LearnedMlpActuatorCfg`
 
@@ -92,6 +91,40 @@ Builtin Actuators
   :undoc-members:
 
 
+.. autoclass:: BuiltinPdActuator
+  :members:
+  :show-inheritance:
+
+.. autoclass:: BuiltinPdActuatorCfg
+  :members:
+  :exclude-members: __init__
+  :undoc-members:
+
+
+.. autoclass:: BuiltinDcMotorActuator
+  :members:
+  :show-inheritance:
+
+.. autoclass:: BuiltinDcMotorActuatorCfg
+  :members:
+  :exclude-members: __init__
+  :undoc-members:
+
+.. autoclass:: DcMotorInputMode
+  :members:
+  :show-inheritance:
+
+.. autoclass:: DcMotorDatasheetParams
+  :members:
+  :exclude-members: __init__
+  :undoc-members:
+
+.. autoclass:: DcMotorPhysicalParams
+  :members:
+  :exclude-members: __init__
+  :undoc-members:
+
+
 .. autoclass:: BuiltinMuscleActuator
   :members:
   :show-inheritance:
@@ -104,41 +137,11 @@ Builtin Actuators
 XML Actuators
 -------------
 
-.. autoclass:: XmlMotorActuator
+.. autoclass:: XmlActuator
   :members:
   :show-inheritance:
 
-.. autoclass:: XmlMotorActuatorCfg
-  :members:
-  :exclude-members: __init__
-  :undoc-members:
-
-
-.. autoclass:: XmlPositionActuator
-  :members:
-  :show-inheritance:
-
-.. autoclass:: XmlPositionActuatorCfg
-  :members:
-  :exclude-members: __init__
-  :undoc-members:
-
-
-.. autoclass:: XmlVelocityActuator
-  :members:
-  :show-inheritance:
-
-.. autoclass:: XmlVelocityActuatorCfg
-  :members:
-  :exclude-members: __init__
-  :undoc-members:
-
-
-.. autoclass:: XmlMuscleActuator
-  :members:
-  :show-inheritance:
-
-.. autoclass:: XmlMuscleActuatorCfg
+.. autoclass:: XmlActuatorCfg
   :members:
   :exclude-members: __init__
   :undoc-members:
@@ -163,18 +166,6 @@ DC Motor Actuator
   :show-inheritance:
 
 .. autoclass:: DcMotorActuatorCfg
-  :members:
-  :exclude-members: __init__
-  :undoc-members:
-
-Delayed Actuator
-----------------
-
-.. autoclass:: DelayedActuator
-  :members:
-  :show-inheritance:
-
-.. autoclass:: DelayedActuatorCfg
   :members:
   :exclude-members: __init__
   :undoc-members:
