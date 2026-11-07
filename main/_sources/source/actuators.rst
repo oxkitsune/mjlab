@@ -137,8 +137,11 @@ through the native bias path, so ``implicit`` / ``implicitfast`` pick up
 its velocity derivative as effective damping. Three input modes pick what
 ``ctrl`` carries: VOLTAGE drives the motor directly; POSITION / VELOCITY
 close an internal PID (with anti-windup and slew limiting) against a
-single setpoint, whose Vmax-clamped output becomes torque. POSITION mode
-pins v_target = 0 (the kd term acts on raw velocity). Optional physics:
+single setpoint. The PID gains are in torque space, ``stiffness`` on the
+position error and ``damping`` on the velocity error, and the driver
+compensates back-EMF, so the commanded torque is delivered until the drive
+voltage reaches Vmax. POSITION mode pins v_target = 0 (the kd term acts on
+raw velocity). Optional physics:
 inductance,
 thermal model with I^2R heating, cogging ripple, LuGre friction.
 ``DcMotorActuator`` (the explicit version) is a software PD with a
@@ -453,6 +456,11 @@ joint.
             Control signals for this actuator
             ([num_envs, num_targets] tensor)
         """
+
+On reset, ``cmd.reset_env_ids`` selects the environments to initialize; it is
+``None`` during physics steps. Command tensors always contain the full batch.
+Stateful ``compute()`` implementations must backfill only the selected rows
+(e.g. using ``CircularBuffer.backfill``), leaving other environments untouched.
 
 **Lifecycle hooks:**
 
